@@ -64,12 +64,10 @@ def check_ret(iroot, ytids):
 
 vroot = f"{home}/data/audioset/video/" 
 oroot = f"{home}/data/audioset/clip/"
-ytids = trim_videos(csv_balanced, vroot)
-#ytids = list(ytids.values())[:100]
-ytids = list(ytids.values())
 
 def mp_worker(ytid):
     """ extract positive clip and create up to 2 background clips
+    :param ytid: (file_name, (start_time, end_time)) 
     """
     pid = multiprocessing.current_process()
     
@@ -78,7 +76,7 @@ def mp_worker(ytid):
     name = f"{oroot}/{ytid[0].split('.')[0]}"
     #name = f"{oroot}/{os.path.splitext(ytid[0])[0]}"
     
-    # find 
+    # video length: https://superuser.com/a/769628 
     arg = ["ffprobe", inf, "-show_format 2>&1", "|", "sed -n -E 's/duration=([0-9]+).*/\\1/p'"]
     ret = subprocess.run(" ".join(arg), capture_output=True, shell=True, text=True)
     out, err = ret.stdout, ret.stderr
@@ -93,9 +91,11 @@ def mp_worker(ytid):
             f"[0:a]atrim=start={b}:end={e},asetpts=PTS-STARTPTS[b]\"",
             "-map '[a]'", "-strict -2", f"{name}.p0.mp4", 
             "-map '[b]'", "-strict -2", f"{name}.p0.m4a" 
-        ] # slow but more accurate in a single command
-    ]
+        ] # slow (reencoding) but more accurate in a single command
+    ] # https://superuser.com/a/723519
+
     # the below results in inaccurate cuts: https://superuser.com/a/1131088
+    # be careful about ss option: https://superuser.com/a/377407; https://trac.ffmpeg.org/wiki/Seeking
     #ss, to = [str(datetime.timedelta(seconds=s)) for s in (b, e)]
     #commands = [
     #    ["ffmpeg", f"-ss {ss}", f"-i {inf}", f"-to {to}", "-y", "-map 0:v -c copy", f"{name}.p0.mp4"],
@@ -103,12 +103,12 @@ def mp_worker(ytid):
     #] 
     
     # random background (non-event) clips
-    # left & right of the event clip
+    # extract a clip from left & right of the event clip, respectively
     c, margin, min_len, nclip = 0, 3, 5, 2
     #commands = []
     b = b - margin
     e = e + margin
-    for i in range(10000):
+    for i in range(10000): # break when reaching the maximum # of clips
         # left side
         if b - 0 >= min_len:
             l = max(0, b - 10)
@@ -118,7 +118,7 @@ def mp_worker(ytid):
             #print(ss, t)
             commands.append([
                 "ffmpeg -y", f"-ss {ss}", f"-i {inf}", f"-t 00:00:{t:02}", "-map 0", f"{name}.n{c}.mp4"
-            ])
+            ]) # https://trac.ffmpeg.org/wiki/Map
             c += 1
             if c >= nclip: break
         # right side
@@ -130,7 +130,7 @@ def mp_worker(ytid):
             #print(ss, t)
             commands.append([
                 "ffmpeg -y", f"-ss {ss}", f"-i {inf}", f"-t 00:00:{t:02}", "-map 0", f"{name}.n{c}.mp4"
-            ])
+            ]) # https://trac.ffmpeg.org/wiki/Map
             c += 1
             if c >= nclip: break
         if (b - 0 < min_len and m - e < min_len) or (c > nclip):
@@ -143,6 +143,11 @@ def mp_worker(ytid):
         #print(ss, to, out, err, yid)
 
 def mp_handler(param_list, nprocess=1, secs=30):
+    """
+    :param param_list: [ytid]
+    :param nprocess: int
+    :param secs: check pool status every #secs
+    """
     p = multiprocessing.Pool(nprocess)
     r = p.map_async(mp_worker, param_list)
     if multiprocessing.current_process().name == 'MainProcess':
@@ -158,6 +163,9 @@ def mp_handler(param_list, nprocess=1, secs=30):
     p.join()
 
 if __name__ == '__main__':
+    ytids = trim_videos(csv_balanced, vroot)
+    #ytids = list(ytids.values())[:100]
+    ytids = list(ytids.values())
     mp_handler(ytids, nprocess=54)
     check_ret(oroot, ytids)
 

@@ -9,7 +9,7 @@ vroot = f"{root}/data/audioset/video/"
 csv_root = f"{root}/data/audioset/csv/"
 
 #with open(f"{root}/data/audioset/download_archive.txt", 'w') as fr:
-#    fr.write("")
+#    fr.write("") # rewrite download record 
 
 command = [
     "youtube-dl", #"-k",
@@ -17,7 +17,8 @@ command = [
     "--download-archive", f"{root}/data/audioset/download_archive.txt",
     "--write-sub", "--write-auto-sub", "--sub-lang en", #"--all-subs", "--embed-sub",
     "--write-info-json", "--write-all-thumbnail",  #"--add-metadata",
-]
+] # https://stackoverflow.com/a/67300109 
+# from external dl: https://www.reddit.com/r/DataHoarder/comments/acjc14/youtubedl_does_not_merge_audio_and_video/ed8pv8w?utm_source=share&utm_medium=web2x&context=3
 
 def read_ytids(ifile):
     ytid_set = list()
@@ -28,11 +29,14 @@ def read_ytids(ifile):
 
 ifile = f"{csv_root}/ytid_all_segments.csv"
 ifile = f"{csv_root}/ytid_balanced_segments.csv"
-ytids = read_ytids(ifile) #[:100]
 vroot = f"{home}/data/audioset/video/" 
+ytids = read_ytids(ifile) #[:100]
 #ytids = ["zx43ZN4pQNw", "G0-aBZ84Vdm", "G0-aBZ84V-g", "2bjqJiBNoUo"] #, "8Qn52i0WPdA", "DgFAdR4-a_0", "RojiFmAmAsc", "zR40A3JGKGo"]
 
 def mp_worker(ytid):
+    """
+    :param ytid: id of a youtube video
+    """
     pid = multiprocessing.current_process()
     url = f"https://www.youtube.com/watch?v={ytid}"
     
@@ -45,6 +49,11 @@ def mp_worker(ytid):
     #print(f"{' '.join(arg)}\n{out}\t{err} ")
 
 def mp_handler(param_list, nprocess=1, secs=30):
+    """
+    :param param_list: [ytid]
+    :param nprocess: int
+    :param secs: check pool status every #secs
+    """
     p = multiprocessing.Pool(nprocess)
     r = p.map_async(mp_worker, param_list)
     if multiprocessing.current_process().name == 'MainProcess':
