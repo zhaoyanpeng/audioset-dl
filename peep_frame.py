@@ -81,7 +81,7 @@ def mp_handler(param_list, nprocess=1, secs=30):
     """
     p = multiprocessing.Pool(nprocess)
     r = p.map_async(mp_worker, param_list)
-    if False and multiprocessing.current_process().name == 'MainProcess':
+    if multiprocessing.current_process().name == 'MainProcess':
         k, c = 50, 0
         n = len(param_list)
         while not r.ready():
