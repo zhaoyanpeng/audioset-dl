@@ -1,0 +1,20 @@
+version: v2-alpha
+description: Youtube Crawler 
+tasks:
+  - name: unbalanced-0-50 
+    image:
+      beaker: Yann/ycrawler
+    arguments: ["python one_for_all.py --home /output --chunk_b 0 --chunk_e 50 --nprocess 16 --portion unbalanced --peeprate 50"] 
+    envVars:
+      - name: OUTPUT_PATH
+        value: /output
+    result:
+      path: /output
+    resources:
+      gpuCount: 0  
+      cpuCount: 16 
+      memory: 45GiB
+    context:
+      cluster: ai2/yann-prem-cpus #ai2/on-prem-aristo #ai2/on-prem-beaker-server1 #
+      priority: high 
+

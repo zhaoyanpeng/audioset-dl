@@ -12,11 +12,11 @@ from collections import defaultdict
 parser = argparse.ArgumentParser()
 parser.add_argument('--home', default='/home/yanpengz/', type=str, help='')
 parser.add_argument('--csv_root', default='./csv/', type=str, help='')
+parser.add_argument('--nprocess', default=1, type=int, help='')
+parser.add_argument('--peeprate', default=100000, type=int, help='')
 parser.add_argument('--portion', default="unbalanced", type=str, help='')
 parser.add_argument('--chunk_b', default=0, type=int, help='')
 parser.add_argument('--chunk_e', default=3000000, type=int, help='')
-parser.add_argument('--nprocess', default=1, type=int, help='')
-parser.add_argument('--peeprate', default=100000, type=int, help='')
 cfg = parser.parse_args()
 # constants
 home = cfg.home 
@@ -287,7 +287,7 @@ def mp_handler(param_list, nprocess=1, secs=30):
         n = len(param_list)
         while not r.ready():
             c += 1 
-            #print(f"{r._number_left}", end=" ")
+            print(f"{r._number_left}", end=" ")
             if c % k == 0: print()
             time.sleep(secs)
     r.wait()
