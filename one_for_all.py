@@ -424,7 +424,18 @@ def mp_handler(param_list, nprocess=1, secs=30):
     p.close()
     p.join()
 
+def save_all_ytids():
+    cfg.portion = "ALL"
+    print(cfg)
+    csv_data = prepare(cfg, True)
+    ytids, _ = collect_ytid(csv_data)
+    with open(f"{csv_root}/all_ytid.txt", "w") as fw:
+        for ytid in ytids:
+            fw.write(f"{ytid}\n")
+    import sys; sys.exit(0)
+
 if __name__ == '__main__':
+    #save_all_ytids()
     csv_data = prepare(cfg, True)
     destroy(False)
     _, dict_ytids = collect_ytid(csv_data)
