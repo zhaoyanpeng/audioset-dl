@@ -59,12 +59,13 @@ def prepare(cfg, verbose=False):
     else:
         return csv_all
 
-def destroy():
+def destroy(debug=False):
     with open(archive_file, 'w') as fr:
         fr.write("") # rewrite download record 
-    ret = subprocess.run(
-        " ".join(["rm", f"{vroot}/*"]), capture_output=True, shell=True, text=True
-    )
+    if not debug:
+        ret = subprocess.run(
+            " ".join(["rm", f"{vroot}/*"]), capture_output=True, shell=True, text=True
+        )
     #ret = subprocess.run(
     #    " ".join(["rm", f"{froot}/*"]), capture_output=True, shell=True, text=True
     #)
@@ -218,7 +219,105 @@ def clip_video(ytid, vfile):
             main_out, main_err = out, err
     return main_out, main_err
 
+def collect_clip(ytid, vfile):
+    """
+    :param ytid: (ytid, [(start_time, end_time, [label0, label1, ...])]) 
+    """
+    name = ytid[0] 
+    b, e = [float(s) for s in ytid[1][0][:2]]
+    # probe the length of the video
+    arg = ["ffprobe", vfile, "-show_format 2>&1", "|", "sed -n -E 's/duration=([0-9]+).*/\\1/p'"]
+    ret = subprocess.run(" ".join(arg), capture_output=True, shell=True, text=True)
+    out, err = ret.stdout, ret.stderr
+    m = float(out) # duration
+
+    b, e = max(0, b), min(e, m)
+    clips = [[b, e, "p0"]] # the gold clip
+
+    # random background (non-event) clips
+    # extract a clip from left & right of the event clip, respectively
+    c, margin, min_len, nclip = 0, 3, 5, 2
+    #commands = []
+    b = b - margin
+    e = e + margin
+    for i in range(10000): # break when reaching the maximum # of clips
+        # left side
+        if b - 0 >= min_len:
+            l = max(0, b - 10)
+            t = b - l
+            ss = str(datetime.timedelta(seconds=l))
+            b = l - margin
+            #print(ss, t)
+            clips.append([l, l + t, f"n{c}"])
+            c += 1
+            if c >= nclip: break
+        # right side
+        if m - e >= min_len:
+            l = e
+            ss = str(datetime.timedelta(seconds=l))
+            t = min(10, m - l)
+            e = l + t + margin
+            #print(ss, t)
+            clips.append([l, l + t, f"n{c}"])
+            c += 1
+            if c >= nclip: break
+        if (b - 0 < min_len and m - e < min_len) or (c > nclip):
+            break # 
+    return clips
+
+def clip_audio(ytid, vfile, clips):
+    """
+    :param ytid: (ytid, [(start_time, end_time, [label0, label1, ...])]) 
+    """
+    name = ytid[0] 
+    main_out, main_err = None, None
+    for iclip, (b, e, flag) in enumerate(clips):
+        arg = [
+            "ffmpeg -y", f"-i {vfile}", "-filter_complex", 
+            f"\"[0:a]atrim=start={b}:end={e},asetpts=PTS-STARTPTS[b]\"",
+            "-map '[b]'", "-strict -2", f"{aroot}/{name}.{flag}.mp3" 
+        ] # https://superuser.com/a/723519
+        #print(" ".join(arg))
+        ret = subprocess.run(" ".join(arg), capture_output=True, shell=True, text=True)
+        out, err = ret.stdout, ret.stderr
+        if iclip == 0:
+            main_out, main_err = out, err
+    return main_out, main_err
+
+def collect_frame(ytid, vfile, clips, num_step=3, fps=0.25): 
+    """
+    :param ytid: (ytid, [(start_time, end_time, [label0, label1, ...])]) 
+    """
+    name = ytid[0] 
+    main_status = [False]
+    for iclip, (b, e, flag) in enumerate(clips):
+        nframe = int(e - b + 1)
+        real_nframe = math.ceil(nframe * fps)
+
+        len_step = (e  - b) / num_step 
+        timestamps =  [b + i * len_step for i in range(num_step + 1)]
+        #timestamps = range(int(b), int(e) + 1, int(1/fps))
+        commands = [[
+            "ffmpeg -y", f"-ss {datetime.timedelta(seconds=l)}", f"-i {vfile}",  
+            "-frames:v 1", "-q:v 1", f"{froot}/{name}.{flag}.{int(1/fps)}.{num_step + 1}_{i + 1:02}.jpg"
+            ] for i, l in enumerate(timestamps) #enumerate([0, 6, 12]) #
+        ]
+        status = [False for _ in range(len(commands))]
+        for i, arg in enumerate(commands):
+            #print(" ".join(arg))
+            ret = subprocess.run(" ".join(arg), capture_output=True, shell=True, text=True)
+            out, err = ret.stdout, ret.stderr
+            if out.strip() == "":
+                status[i] = True 
+            #print(out, err)
+        if iclip == 0:
+            main_status = status 
+    return main_status
+
 def rm_video(vfile):
+    """
+    :param vfile: str: the video file
+    """
     if not os.path.isfile(vfile):
         return None, None 
     arg = ["rm", vfile]
@@ -232,10 +331,11 @@ def mp_worker(ytid):
     """
     name = ytid[0] 
     try: # download
-        #vfile = "/home/yanpengz//data/unbalanced/video//--PJHxphWEs.mp4" 
-        #if name != "--PJHxphWEs":
+        #if name != "---1_cCGK4M":
         #    return name, 0 # debug 
-        out, err, vfile = dl_video(ytid)
+        vfile = f"{vroot}/{name}.mp4" 
+        if not os.path.isfile(vfile):
+            out, err, vfile = dl_video(ytid)
         #print(ytid, vfile)
     except Exception as e:
         vfile = None
@@ -243,24 +343,51 @@ def mp_worker(ytid):
         pass
     if vfile is None: 
         return name, 0
-
-    try: # frame extraction
-        status = peep_frame(ytid, vfile)
-        assert isinstance(status, list)
-        flag = int(all(status))
-    except Exception as e:
-        print(f"Err in frame extraction {name}: {e}")
-        flag = 0
-        pass
     
-    try: # video clip
-        out, err = clip_video(ytid, vfile)
-        flag = flag & (out.strip() == "")
-        #print(flag, f"\n-->>>\n{out.strip()}\n{err.strip()}\n<<<--")
-    except Exception as e:
-        print(f"Err in video clipping {name}: {e}")
-        flag = 0
-        pass
+    save_video = False
+    if not save_video: 
+        try: # clip extraction
+            clips = collect_clip(ytid, vfile)
+        except Exception as e:
+            print(f"Err in clip extraction {name}: {e}")
+            clips = []
+            pass
+
+        try: # frame extraction
+            status = collect_frame(ytid, vfile, clips)
+            assert isinstance(status, list)
+            flag = int(all(status))
+        except Exception as e:
+            print(f"Err in frame extraction {name}: {e}")
+            flag = 0
+            pass
+        
+        try: # audio clip
+            out, err = clip_audio(ytid, vfile, clips)
+            flag = flag & (out.strip() == "")
+            #print(f"f{flag}", f"\n-->>>\n{out.strip()}\n{err.strip()}\n<<<--")
+        except Exception as e:
+            print(f"Err in audio clipping {name}: {e}")
+            flag = 0
+            pass
+    else:
+        try: # frame extraction
+            status = peep_frame(ytid, vfile)
+            assert isinstance(status, list)
+            flag = int(all(status))
+        except Exception as e:
+            print(f"Err in frame extraction {name}: {e}")
+            flag = 0
+            pass
+        
+        try: # video clip
+            out, err = clip_video(ytid, vfile)
+            flag = flag & (out.strip() == "")
+            print(f"f{flag}", f"\n-->>>\n{out.strip()}\n{err.strip()}\n<<<--")
+        except Exception as e:
+            print(f"Err in video clipping {name}: {e}")
+            flag = 0
+            pass
     
     try: # video remove
         if flag == 1: # further take care
@@ -296,7 +423,7 @@ def mp_handler(param_list, nprocess=1, secs=30):
 
 if __name__ == '__main__':
     csv_data = prepare(cfg, True)
-    destroy()
+    destroy(False)
     _, dict_ytids = collect_ytid(csv_data)
     ytids = list(dict_ytids.items())[cfg.chunk_b : cfg.chunk_e]
     mp_handler(ytids, nprocess=cfg.nprocess, secs=cfg.peeprate)
