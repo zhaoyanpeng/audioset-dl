@@ -12,6 +12,7 @@ from collections import defaultdict
 parser = argparse.ArgumentParser()
 parser.add_argument('--home', default='/home/yanpengz/', type=str, help='')
 parser.add_argument('--csv_root', default='./csv/', type=str, help='')
+parser.add_argument('--keepdata', default=False, type=bool, help='')
 parser.add_argument('--nprocess', default=1, type=int, help='')
 parser.add_argument('--peeprate', default=100000, type=int, help='')
 parser.add_argument('--portion', default="unbalanced", type=str, help='')
@@ -20,6 +21,7 @@ parser.add_argument('--chunk_e', default=3000000, type=int, help='')
 cfg = parser.parse_args()
 # constants
 home = cfg.home 
+keepdata = cfg.keepdata
 csv_root = cfg.csv_root 
 suffix = f"{cfg.chunk_b}_{cfg.chunk_e}" 
 # save paths 
@@ -390,7 +392,7 @@ def mp_worker(ytid):
             pass
     
     try: # video remove
-        if flag == 1: # further take care
+        if (not keepdata) and flag == 1: # further take care
             out, err = rm_video(vfile)
     except Exception as e:
         print(f"Err in deleting video {name}: {e}")
@@ -403,6 +405,7 @@ def mp_handler(param_list, nprocess=1, secs=30):
     :param nprocess: int
     :param secs: check pool status every #secs
     """
+    print(f"total {len(param_list)} videos to download.")
     p = multiprocessing.Pool(nprocess)
     def write_err(results):
         with open(err_file, 'w') as f:
