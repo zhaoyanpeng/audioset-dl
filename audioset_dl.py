@@ -10,7 +10,7 @@ from collections import defaultdict
 
 # Data path options
 parser = argparse.ArgumentParser()
-parser.add_argument('--home', default='/home/yanpengz/', type=str, help='')
+parser.add_argument('--home', default='./', type=str, help='Where shall I save the data?')
 parser.add_argument('--csv_root', default='./csv/', type=str, help='')
 parser.add_argument('--keepdata', default=False, type=bool, help='')
 parser.add_argument('--nprocess', default=1, type=int, help='')

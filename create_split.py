@@ -13,11 +13,11 @@ from tqdm import tqdm
 from csv import reader, writer, DictReader
 from collections import defaultdict
 
-""" create AudioSet data splits.
+""" create AudioSet data splits. please reset ``home'' and ``root''.
 """
 
-home = "/home/yanpengz/"
-root = "/net/nfs2.mosaic/yann/"
+home = "REPLACE_ME" # hey where do you want store your data?
+root = "REPLACE_ME" # and where can I find all the csv files of AudioSet?
 vroot = f"{root}/data/audioset/video/"
 csv_root = f"{root}/data/audioset/csv/"
 
